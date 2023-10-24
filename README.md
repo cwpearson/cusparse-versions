@@ -3,4 +3,5 @@
 ## Prerequisites
 
 * GNU parallel
+* bc
 
