@@ -7,6 +7,9 @@ SIMULTANEOUS_EXTRACTS=2
 URLS=(
 https://developer.nvidia.com/compute/cuda/10.0/Prod/local_installers/cuda_10.0.130_410.48_linux
 https://developer.nvidia.com/compute/cuda/10.1/Prod/local_installers/cuda_10.1.105_418.39_linux.run
+https://developer.nvidia.com/compute/cuda/10.1/Prod/local_installers/cuda_10.1.168_418.67_linux.run
+https://developer.download.nvidia.com/compute/cuda/10.1/Prod/local_installers/cuda_10.1.243_418.87.00_linux.run
+https://developer.download.nvidia.com/compute/cuda/10.2/Prod/local_installers/cuda_10.2.89_440.33.01_linux.run
 )
 
 function cuda_release {
@@ -30,11 +33,21 @@ function extract {
     dirname="${fname%.*}"
     echo "$fname -> $dirname"
     rm -rf "$dirname"
-
-    if [[ $1 == *"1.105"* ]]; then
-        $SHELL "$fname" --silent --override --toolkit --toolkitpath="$dirname" --defaultroot="$dirname"
-    else
+    if [[ $1 == *"0.130"* ]]; then
         $SHELL "$fname" --silent --override --toolkit --toolkitpath="$dirname"
+        $SHELL "$fname" --silent --override --extract="$dirname"
+        rm -f $dirname/cuda-linux*
+        rm -f $dirname/cuda-samples-*
+    elif [[ $1 == *"1.105"* ]] || [[ $1 == *"1.168"* ]]; then
+        $SHELL "$fname" --silent --override --toolkit --toolkitpath="$dirname" --defaultroot="$dirname"
+        $SHELL "$fname" --silent --override --extract="$dirname"
+        rm -f $dirname/cuda-linux*
+        rm -f $dirname/cuda-samples-*
+    elif [[ $1 == *"1.243"* ]] || [[ $1 == *"2.89"* ]]; then
+        $SHELL "$fname" --silent --override --override-driver-check --toolkit --toolkitpath="$dirname" --defaultroot="$dirname"
+        $SHELL "$fname" --silent --override --override-driver-check --extract="$dirname"
+        rm -f $dirname/cuda-linux*
+        rm -f $dirname/cuda-samples-*
     fi
 }
 export -f extract # export to subshells
@@ -138,7 +151,7 @@ function nsight_size {
 }
 
 function driver_size {
-    echo 0
+    path_size $1 NVIDIA-*
 }
 
 function pct {
@@ -352,11 +365,11 @@ function size_csv {
     size_table
 }
 
-# echo "downloading"
-# nice -n20 parallel -j${SIMULTANEOUS_DOWNLOADS} download {} ::: ${URLS[*]}
+echo "downloading"
+nice -n20 parallel -j${SIMULTANEOUS_DOWNLOADS} download {} ::: ${URLS[*]}
 
-# echo "extracting"
-# nice -n20 parallel -j${SIMULTANEOUS_EXTRACTS} extract {} ::: ${URLS[*]}
+echo "extracting"
+nice -n20 parallel -j${SIMULTANEOUS_EXTRACTS} extract {} ::: ${URLS[*]}
 
 sym_html
 sym_csv
