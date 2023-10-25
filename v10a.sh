@@ -1,20 +1,16 @@
 set -eou pipefail
 
+export WORK_DIR=/rust/cwpears/cudas
 SIMULTANEOUS_DOWNLOADS=4
 SIMULTANEOUS_EXTRACTS=2
 
 URLS=(
-https://developer.download.nvidia.com/compute/cuda/12.0.0/local_installers/cuda_12.0.0_525.60.13_linux.run
-https://developer.download.nvidia.com/compute/cuda/12.0.1/local_installers/cuda_12.0.1_525.85.12_linux.run
-https://developer.download.nvidia.com/compute/cuda/12.1.0/local_installers/cuda_12.1.0_530.30.02_linux.run
-https://developer.download.nvidia.com/compute/cuda/12.1.1/local_installers/cuda_12.1.1_530.30.02_linux.run
-https://developer.download.nvidia.com/compute/cuda/12.2.0/local_installers/cuda_12.2.0_535.54.03_linux.run
-https://developer.download.nvidia.com/compute/cuda/12.2.1/local_installers/cuda_12.2.1_535.86.10_linux.run
-https://developer.download.nvidia.com/compute/cuda/12.2.2/local_installers/cuda_12.2.2_535.104.05_linux.run
+https://developer.nvidia.com/compute/cuda/10.0/Prod/local_installers/cuda_10.0.130_410.48_linux
+https://developer.nvidia.com/compute/cuda/10.1/Prod/local_installers/cuda_10.1.105_418.39_linux.run
 )
 
 function cuda_release {
-    version_re='/([0-9]+\.[0-9]+\.[0-9]+)/'
+    version_re='/([0-9]+\.[0-9]+\.*[0-9]*)/'
     if [[ $1 =~ $version_re ]]; then
         echo ${BASH_REMATCH[1]}
     else
@@ -24,149 +20,125 @@ function cuda_release {
 }
 
 function download {
-    wget --no-check-certificate -c $1
+    wget --no-check-certificate -P "$WORK_DIR" -c $1
 }
 export -f download # export to subshells
 
 
 function extract {
-    fname=$(basename $1)
+    fname="$WORK_DIR"/$(basename $1)
     dirname="${fname%.*}"
-    echo "$1 -> $dirname"
-    rm -rf $dirname
-    $SHELL $fname --extract=$PWD/$dirname
+    echo "$fname -> $dirname"
+    rm -rf "$dirname"
+
+    if [[ $1 == *"1.105"* ]]; then
+        $SHELL "$fname" --silent --override --toolkit --toolkitpath="$dirname" --defaultroot="$dirname"
+    else
+        $SHELL "$fname" --silent --override --toolkit --toolkitpath="$dirname"
+    fi
 }
 export -f extract # export to subshells
 
 function cuda_version {
-    fname=$(basename $1)
+    fname="$WORK_DIR"/$(basename $1)
     dirname="${fname%.*}"
-    version=$(grep -roh -E 'CUDA_VERSION ([0-9]+)' $dirname/cuda_cudart/include | grep -o -E '[0-9]+')
+    version=$(grep -roh -E 'CUDA_VERSION ([0-9]+)' $dirname/include | grep -o -E '[0-9]+')
     echo CUDA_VERSION '(CUDA API Version)' $version
 }
 
-function dir_size {
-    fname=$(basename $1)
+function path_size {
+    fname="$WORK_DIR"/$(basename $1)
     dirname="${fname%.*}"
-    size=$(du -s $dirname/$2 | cut -f1)
-    echo $size
+    if stat -t $dirname/$2 >/dev/null 2>&1; then # tests if glob matches anything
+        du -sLc $dirname/$2 | tail -n1 | cut -f1
+    else
+        echo 0
+    fi
+}
+
+function so_size {
+    fname="$WORK_DIR"/$(basename $1)
+    dirname="${fname%.*}"
+    du -sLc $dirname/lib64/$2*.so | tail -n1 | cut -f1
 }
 
 function dir_syms {
     shopt -s globstar
-    fname=$(basename $1)
+    fname="$WORK_DIR"/$(basename $1)
     dirname="${fname%.*}"
-    nm -D --defined-only $dirname/$2/**/*.so | wc -l
-}
-
-function cusparse_version {
-    fname=$(basename $1)
-    dirname="${fname%.*}"
-    major=$(grep -roh -E 'CUSPARSE_VER_MAJOR ([0-9]+)' $dirname/libcusparse/include | grep -o -E '[0-9]+')
-    minor=$(grep -roh -E 'CUSPARSE_VER_MINOR ([0-9]+)' $dirname/libcusparse/include | grep -o -E '[0-9]+')
-    patch=$(grep -roh -E 'CUSPARSE_VER_PATCH ([0-9]+)' $dirname/libcusparse/include | grep -o -E '[0-9]+')
-    build=$(grep -roh -E 'CUSPARSE_VER_BUILD ([0-9]+)' $dirname/libcusparse/include | grep -o -E '[0-9]+')
-    echo $major.$minor.$patch.$build
-}
-
-function cublas_version {
-    fname=$(basename $1)
-    dirname="${fname%.*}"
-    major=$(grep -roh -E 'CUBLAS_VER_MAJOR ([0-9]+)' $dirname/libcublas/include | grep -o -E '[0-9]+')
-    minor=$(grep -roh -E 'CUBLAS_VER_MINOR ([0-9]+)' $dirname/libcublas/include | grep -o -E '[0-9]+')
-    patch=$(grep -roh -E 'CUBLAS_VER_PATCH ([0-9]+)' $dirname/libcublas/include | grep -o -E '[0-9]+')
-    build=$(grep -roh -E 'CUBLAS_VER_BUILD ([0-9]+)' $dirname/libcublas/include | grep -o -E '[0-9]+')
-    echo $major.$minor.$patch.$build
-}
-
-function cusolver_version {
-    fname=$(basename $1)
-    dirname="${fname%.*}"
-    major=$(grep -roh -E 'CUSOLVER_VER_MAJOR ([0-9]+)' $dirname/libcusolver/include | grep -o -E '[0-9]+')
-    minor=$(grep -roh -E 'CUSOLVER_VER_MINOR ([0-9]+)' $dirname/libcusolver/include | grep -o -E '[0-9]+')
-    patch=$(grep -roh -E 'CUSOLVER_VER_PATCH ([0-9]+)' $dirname/libcusolver/include | grep -o -E '[0-9]+')
-    build=$(grep -roh -E 'CUSOLVER_VER_BUILD ([0-9]+)' $dirname/libcusolver/include | grep -o -E '[0-9]+')
-    echo $major.$minor.$patch.$build
-}
-
-function cufft_version {
-    fname=$(basename $1)
-    dirname="${fname%.*}"
-    major=$(grep -roh -E 'CUFFT_VER_MAJOR ([0-9]+)' $dirname/libcufft/include | grep -o -E '[0-9]+')
-    minor=$(grep -roh -E 'CUFFT_VER_MINOR ([0-9]+)' $dirname/libcufft/include | grep -o -E '[0-9]+')
-    patch=$(grep -roh -E 'CUFFT_VER_PATCH ([0-9]+)' $dirname/libcufft/include | grep -o -E '[0-9]+')
-    build=$(grep -roh -E 'CUFFT_VER_BUILD ([0-9]+)' $dirname/libcufft/include | grep -o -E '[0-9]+')
-    echo $major.$minor.$patch.$build
+    nm -D --defined-only $dirname/lib64/$2.so | wc -l
 }
 
 function cuda_size {
-    fname=$(basename $1)
+    fname="$WORK_DIR"/$(basename $1)
     dirname="${fname%.*}"
-    size=$(du -s $dirname | cut -f1)
-    echo $size
+    du -s "$dirname" | cut -f1
 }
 
 function cusparse_size {
-    dir_size $1 libcusparse
+    so_size $1 libcusparse
 }
 
 function cublas_size {
-    dir_size $1 libcublas
+    so_size $1 libcublas
 }
 
 function nvcc_size {
-    dir_size $1 cuda_nvcc/bin/nvcc
+    path_size $1 bin/nvcc
 }
 
 function cufft_size {
-    dir_size $1 libcufft
+    so_size $1 libcufft
 }
 
 function curand_size {
-    dir_size $1 libcurand
+    so_size $1 libcurand
 }
 
 function cusolver_size {
-    dir_size $1 libcusolver
+    so_size $1 libcusolver
 }
 
 function npp_size {
-    dir_size $1 libnpp
+    so_size $1 libnpp*
 }
 
 function nsight_compute_size {
-    dir_size $1 nsight_compute
+    a=$(path_size $1 NsightCompute-*)
+    b=$(path_size $1 nsight-compute-*)
+    echo $a + $b | bc -l
 }
 
 function nsight_systems_size {
-    dir_size $1 nsight_systems
+    a=$(path_size $1 NsightSystems-*)
+    b=$(path_size $1 nsight-systems-*)
+    echo $a + $b | bc -l
 }
 
 function cupti_size {
-    dir_size $1 cuda_cupti
+    fname="$WORK_DIR"/$(basename $1)
+    dirname="${fname%.*}"
+    du -sLc $dirname/extras/CUPTI/lib64/libcupti*.so | tail -n1 | cut -f1
 }
 
 function gdb_size {
-    dir_size $1 cuda_gdb
+    path_size $1 bin/cuda-gdb*
 }
 
 function cudart_size {
-    dir_size $1 cuda_cudart
+    so_size $1 libcudart
 }
 
 function nvrtc_size {
-    dir_size $1 cuda_nvrtc
+    so_size $1 libnvrtc
 }
 
 function nsight_size {
-    dir_size $1 cuda_nsight
+    path_size $1 libnsight
 }
 
 function driver_size {
-    fname=$(basename $1)
-    dirname="${fname%.*}"
-    size=$(du -s $dirname/NVIDIA-* | cut -f1)
-    echo $size
+    echo 0
 }
 
 function pct {
@@ -194,55 +166,20 @@ function curand_syms {
 }
 
 function cudart_syms {
-    dir_syms $1 cuda_cudart
+    dir_syms $1 libcudart
 }
 
 function cupti_syms {
-    dir_syms $1 cuda_cupti
+    shopt -s globstar
+    fname="$WORK_DIR"/$(basename $1)
+    dirname="${fname%.*}"
+    nm -D --defined-only $dirname/extras/CUPTI/lib64/libcupti*.so | wc -l
 }
 
 function npp_syms {
-    dir_syms $1 libnpp
+    dir_syms $1 libnpp*
 }
 
-# echo "downloading"
-# nice -n20 parallel -j${SIMULTANEOUS_DOWNLOADS} download {} ::: ${URLS[*]}
-
-# echo "extracting"
-# nice -n20 parallel -j${SIMULTANEOUS_EXTRACTS} extract {} ::: ${URLS[*]}
-
-function ver_table {
-    printf "${TABLE_START}"
-    printf "${ROW_START}"
-    printf "${HCELL_START}CUDA Release${HCELL_END}"
-    printf "${HCELL_START}cuSPARSE${HCELL_END}"
-    printf "${HCELL_START}cuBLAS${HCELL_END}"
-    printf "${HCELL_START}cuSOLVER${HCELL_END}"
-    printf "${HCELL_START}cuFFT${HCELL_END}"
-    printf "${ROW_END}"
-    for url in ${URLS[*]}; do
-        printf "${ROW_START}"
-        printf "${CELL_START}$(cuda_release $url)${CELL_END}"
-        printf "${CELL_START}$(cusparse_version $url)${CELL_END}"
-        printf "${CELL_START}$(cublas_version $url)${CELL_END}"
-        printf "${CELL_START}$(cusolver_version $url)${CELL_END}"
-        printf "${CELL_START}$(cufft_version $url)${CELL_END}"
-        printf "${ROW_END}"
-    done
-    printf "${TABLE_END}"
-}
-
-function ver_html {
-    TABLE_START="<table>"
-    TABLE_END="</table>\n"
-    ROW_START="<tr>"
-    ROW_END="</tr>\n"
-    HCELL_START="<th>"
-    HCELL_END="</th>"
-    CELL_START="<td>"
-    CELL_END="</td>"
-    ver_table
-}
 
 function sym_table {
     printf "${TABLE_START}"
@@ -302,21 +239,21 @@ function size_table {
     printf "$ROW_START"
     printf "${HCELL_START}CUDA Release${HCELL_END}"
     printf "${HCELL_START}Size (K)${HCELL_END}"
-    printf "${HCELL_START}cuSPARSE Size${HCELL_END}"
-    printf "${HCELL_START}cuBLAS Size${HCELL_END}"
-    printf "${HCELL_START}nvcc Size${HCELL_END}"
-    printf "${HCELL_START}cuFFT Size${HCELL_END}"
-    printf "${HCELL_START}cuRAND Size${HCELL_END}"
-    printf "${HCELL_START}cuSOLVER Size${HCELL_END}"
-    printf "${HCELL_START}npp Size${HCELL_END}"
+    printf "${HCELL_START}cuSPARSE${HCELL_END}"
+    printf "${HCELL_START}cuBLAS${HCELL_END}"
+    printf "${HCELL_START}nvcc${HCELL_END}"
+    printf "${HCELL_START}cuFFT${HCELL_END}"
+    printf "${HCELL_START}cuRAND${HCELL_END}"
+    printf "${HCELL_START}cuSOLVER${HCELL_END}"
+    printf "${HCELL_START}npp${HCELL_END}"
     printf "${HCELL_START}Nsight Compute${HCELL_END}"
     printf "${HCELL_START}Nsight Systems${HCELL_END}"
-    printf "${HCELL_START}cuPTI Size${HCELL_END}"
-    printf "${HCELL_START}CUDA GDB Size${HCELL_END}"
-    printf "${HCELL_START}cudart Size${HCELL_END}"
-    printf "${HCELL_START}nvrtc Size${HCELL_END}"
-    printf "${HCELL_START}nsight Size${HCELL_END}"
-    printf "${HCELL_START}driver Size${HCELL_END}"
+    printf "${HCELL_START}cuPTI${HCELL_END}"
+    printf "${HCELL_START}CUDA GDB${HCELL_END}"
+    printf "${HCELL_START}cudart${HCELL_END}"
+    printf "${HCELL_START}nvrtc${HCELL_END}"
+    printf "${HCELL_START}nsight${HCELL_END}"
+    printf "${HCELL_START}driver${HCELL_END}"
     printf "$ROW_END"
     for url in ${URLS[*]}; do
         _r=$(cuda_release "$url")
@@ -415,7 +352,12 @@ function size_csv {
     size_table
 }
 
-ver_html
+# echo "downloading"
+# nice -n20 parallel -j${SIMULTANEOUS_DOWNLOADS} download {} ::: ${URLS[*]}
+
+# echo "extracting"
+# nice -n20 parallel -j${SIMULTANEOUS_EXTRACTS} extract {} ::: ${URLS[*]}
+
 sym_html
 sym_csv
 size_html

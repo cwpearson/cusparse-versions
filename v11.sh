@@ -71,6 +71,13 @@ function dir_size {
     echo $size
 }
 
+function dir_syms {
+    shopt -s globstar
+    fname=$(basename $1)
+    dirname="${fname%.*}"
+    nm -D --defined-only $dirname/$2/**/*.so | wc -l
+}
+
 function cusparse_version {
     fname=$(basename $1)
     dirname="${fname%.*}"
@@ -79,10 +86,6 @@ function cusparse_version {
     patch=$(grep -roh -E 'CUSPARSE_VER_PATCH ([0-9]+)' $dirname/libcusparse/include | grep -o -E '[0-9]+')
     build=$(grep -roh -E 'CUSPARSE_VER_BUILD ([0-9]+)' $dirname/libcusparse/include | grep -o -E '[0-9]+')
     echo $major.$minor.$patch.$build
-}
-
-function cusparse_size {
-    dir_size $1 libcusparse
 }
 
 function cublas_version {
@@ -95,9 +98,24 @@ function cublas_version {
     echo $major.$minor.$patch.$build
 }
 
+function cusolver_version {
+    fname=$(basename $1)
+    dirname="${fname%.*}"
+    major=$(grep -roh -E 'CUSOLVER_VER_MAJOR ([0-9]+)' $dirname/libcusolver/include | grep -o -E '[0-9]+')
+    minor=$(grep -roh -E 'CUSOLVER_VER_MINOR ([0-9]+)' $dirname/libcusolver/include | grep -o -E '[0-9]+')
+    patch=$(grep -roh -E 'CUSOLVER_VER_PATCH ([0-9]+)' $dirname/libcusolver/include | grep -o -E '[0-9]+')
+    build=$(grep -roh -E 'CUSOLVER_VER_BUILD ([0-9]+)' $dirname/libcusolver/include | grep -o -E '[0-9]+')
+    echo $major.$minor.$patch.$build
+}
 
-function cublas_size {
-    dir_size $1 libcublas
+function cufft_version {
+    fname=$(basename $1)
+    dirname="${fname%.*}"
+    major=$(grep -roh -E 'CUFFT_VER_MAJOR ([0-9]+)' $dirname/libcufft/include | grep -o -E '[0-9]+')
+    minor=$(grep -roh -E 'CUFFT_VER_MINOR ([0-9]+)' $dirname/libcufft/include | grep -o -E '[0-9]+')
+    patch=$(grep -roh -E 'CUFFT_VER_PATCH ([0-9]+)' $dirname/libcufft/include | grep -o -E '[0-9]+')
+    build=$(grep -roh -E 'CUFFT_VER_BUILD ([0-9]+)' $dirname/libcufft/include | grep -o -E '[0-9]+')
+    echo $major.$minor.$patch.$build
 }
 
 function cuda_size {
@@ -105,6 +123,14 @@ function cuda_size {
     dirname="${fname%.*}"
     size=$(du -s $dirname | cut -f1)
     echo $size
+}
+
+function cusparse_size {
+    dir_size $1 libcusparse
+}
+
+function cublas_size {
+    dir_size $1 libcublas
 }
 
 function nvcc_size {
@@ -166,133 +192,250 @@ function pct {
     echo "x=$1 / $2 * 100; scale=2; x/1" | bc -l
 }
 
+function cusparse_syms {
+    dir_syms $1 libcusparse
+}
+
+function cublas_syms {
+    dir_syms $1 libcublas
+}
+
+function cusolver_syms {
+    dir_syms $1 libcusolver
+}
+
+function cufft_syms {
+    dir_syms $1 libcufft
+}
+
+function curand_syms {
+    dir_syms $1 libcurand
+}
+
+function cudart_syms {
+    dir_syms $1 cuda_cudart
+}
+
+function cupti_syms {
+    dir_syms $1 cuda_cupti
+}
+
+function npp_syms {
+    dir_syms $1 libnpp
+}
+
 # echo "downloading"
 # nice -n20 parallel -j${SIMULTANEOUS_DOWNLOADS} download {} ::: ${URLS[*]}
 
 # echo "extracting"
 # nice -n20 parallel -j${SIMULTANEOUS_EXTRACTS} extract {} ::: ${URLS[*]}
 
-echo "<table>"
-echo "<tr><th> CUDA Release </th><th> cuSPARSE Version </th><th> cuBLAS Version </th></tr>"
-for url in ${URLS[*]}; do
-    _r=$(cuda_release "$url")
-    _cs_v=$(cusparse_version "$url")
-    _cb_v=$(cublas_version "$url")
-    echo "<tr><td> $_r </td><td> $_cs_v </td><td> $_cb_v </td></tr>"
-done
-echo "</table>"
+function ver_table {
+    printf "${TABLE_START}"
+    printf "${ROW_START}"
+    printf "${HCELL_START}CUDA Release${HCELL_END}"
+    printf "${HCELL_START}cuSPARSE${HCELL_END}"
+    printf "${HCELL_START}cuBLAS${HCELL_END}"
+    printf "${HCELL_START}cuSOLVER${HCELL_END}"
+    printf "${HCELL_START}cuFFT${HCELL_END}"
+    printf "${ROW_END}"
+    for url in ${URLS[*]}; do
+        printf "${ROW_START}"
+        printf "${CELL_START}$(cuda_release $url)${CELL_END}"
+        printf "${CELL_START}$(cusparse_version $url)${CELL_END}"
+        printf "${CELL_START}$(cublas_version $url)${CELL_END}"
+        printf "${CELL_START}$(cusolver_version $url)${CELL_END}"
+        printf "${CELL_START}$(cufft_version $url)${CELL_END}"
+        printf "${ROW_END}"
+    done
+    printf "${TABLE_END}"
+}
 
-echo "<table>"
-echo -n "<tr>"
-echo -n "<th> CUDA Release </th>"
-echo -n "<th> Size (K) </th>"
-echo -n "<th> cuSPARSE Size</th>"
-echo -n "<th> cuBLAS Size</th>"
-echo -n "<th> nvcc Size</th>"
-echo -n "<th> cuFFT Size</th>"
-echo -n "<th> cuRAND Size</th>"
-echo -n "<th> cuSOLVER Size</th>"
-echo -n "<th> npp Size</th>"
-echo -n "<th> Nsight Compute</th>"
-echo -n "<th> Nsight Systems</th>"
-echo -n "<th> cuPTI Size</th>"
-echo -n "<th> CUDA GDB Size</th>"
-echo -n "<th> cudart Size</th>"
-echo -n "<th> nvrtc Size </th>"
-echo -n "<th> nsight Size </th>"
-echo -n "<th> driver Size </th>"
-echo "</tr>"
-for url in ${URLS[*]}; do
-    _r=$(cuda_release "$url")
-    _c_s=$(cuda_size "$url")
-    _cs_s=$(cusparse_size "$url")
-    _cb_s=$(cublas_size "$url")
-    _nvcc_s=$(nvcc_size "$url")
-    _cufft_s=$(cufft_size "$url")
-    _curand_s=$(curand_size "$url")
-    _cusolver_s=$(cusolver_size "$url")
-    _npp_s=$(npp_size "$url")
-    _nsight_compute_s=$(nsight_compute_size "$url")
-    _nsight_systems_s=$(nsight_systems_size "$url")
-    _cupti_s=$(cupti_size "$url")
-    _gdb_s=$(gdb_size "$url")
-    _cudart_s=$(cudart_size "$url")
-    _nvrtc_s=$(nvrtc_size "$url")
-    _nsight_s=$(nsight_size "$url")
-    _driver_s=$(driver_size "$url")
-    echo -n "<tr><td> $_r </td>"
-    echo -n "<td> $_c_s </td>"
-    echo -n "<td> $_cs_s ("$(pct $_cs_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_cb_s ("$(pct $_cb_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_nvcc_s ("$(pct $_nvcc_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_cufft_s ("$(pct $_cufft_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_curand_s ("$(pct $_curand_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_cusolver_s ("$(pct $_cusolver_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_npp_s ("$(pct $_npp_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_nsight_compute_s ("$(pct $_nsight_systems_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_nsight_systems_s ("$(pct $_nsight_compute_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_cupti_s ("$(pct $_cupti_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_gdb_s ("$(pct $_gdb_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_cudart_s ("$(pct $_cudart_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_nvrtc_s ("$(pct $_nvrtc_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_nsight_s ("$(pct $_nsight_s $_c_s)"&#37) </td>"
-    echo -n "<td> $_driver_s ("$(pct $_driver_s $_c_s)"&#37) </td>"
-    echo "</tr>"
-done
-echo "</table>"
+function ver_html {
+    TABLE_START="<table>\n"
+    TABLE_END="</table>\n"
+    ROW_START="<tr>"
+    ROW_END="</tr>\n"
+    HCELL_START="<th>"
+    HCELL_END="</th>"
+    CELL_START="<td>"
+    CELL_END="</td>"
+    ver_table
+}
 
+function sym_table {
+    printf "${TABLE_START}"
+    printf "${ROW_START}${HCELL_START}CUDA Release${HCELL_END}"
+    printf "${HCELL_START}cuSPARSE${HCELL_END}"
+    printf "${HCELL_START}cuBLAS${HCELL_END}"
+    printf "${HCELL_START}cuSOLVER${HCELL_END}"
+    printf "${HCELL_START}cuFFT${HCELL_END}"
+    printf "${HCELL_START}cuRAND${HCELL_END}"
+    printf "${HCELL_START}cudart${HCELL_END}"
+    printf "${HCELL_START}cupti${HCELL_END}"
+    printf "${HCELL_START}npp${HCELL_END}"
+    printf "${ROW_END}"
+    for url in ${URLS[*]}; do
+        _r=$(cuda_release "$url")
+        printf "${ROW_START}"
+        printf "${CELL_START}$_r${CELL_END}"
+        printf "${CELL_START}$(cusparse_syms $url)${CELL_END}"
+        printf "${CELL_START}$(cublas_syms $url)${CELL_END}"
+        printf "${CELL_START}$(cusolver_syms $url)${CELL_END}"
+        printf "${CELL_START}$(cufft_syms $url)${CELL_END}"
+        printf "${CELL_START}$(curand_syms $url)${CELL_END}"
+        printf "${CELL_START}$(cudart_syms $url)${CELL_END}"
+        printf "${CELL_START}$(cupti_syms $url)${CELL_END}"
+        printf "${CELL_START}$(npp_syms $url)${CELL_END}"
+        printf "$ROW_END"
+    done
+    printf "${TABLE_END}"
+}
 
+function sym_html {
+    TABLE_START="<table>\n"
+    TABLE_END="</table>\n"
+    ROW_START="<tr>"
+    ROW_END="</tr>\n"
+    HCELL_START="<th>"
+    HCELL_END="</th>"
+    CELL_START="<td>"
+    CELL_END="</td>"
+    sym_table
+}
 
-echo -n "CUDA Release,"
-echo -n "cuSPARSE,"
-echo -n "cuBLAS,"
-echo -n "nvcc,"
-echo -n "cuFFT,"
-echo -n "cuRAND,"
-echo -n "cuSOLVER,"
-echo -n "npp,"
-echo -n "Nsight Compute,"
-echo -n "Nsight Systems,"
-echo -n "cuPTI,"
-echo -n "CUDA GDB,"
-echo -n "cudart,"
-echo -n "nvrtc,"
-echo -n "nsight,"
-echo -n "driver,"
-echo ""
-for url in ${URLS[*]}; do
-    _r=$(cuda_release "$url")
-    _c_s=$(cuda_size "$url")
-    _cs_s=$(cusparse_size "$url")
-    _cb_s=$(cublas_size "$url")
-    _nvcc_s=$(nvcc_size "$url")
-    _cufft_s=$(cufft_size "$url")
-    _curand_s=$(curand_size "$url")
-    _cusolver_s=$(cusolver_size "$url")
-    _npp_s=$(npp_size "$url")
-    _nsight_compute_s=$(nsight_compute_size "$url")
-    _nsight_systems_s=$(nsight_systems_size "$url")
-    _cupti_s=$(cupti_size "$url")
-    _gdb_s=$(gdb_size "$url")
-    _cudart_s=$(cudart_size "$url")
-    _nvrtc_s=$(nvrtc_size "$url")
-    _nsight_s=$(nsight_size "$url")
-    _driver_s=$(driver_size "$url")
-    echo -n "$_r,"
-    echo -n "$_cs_s,"
-    echo -n "$_cb_s,"
-    echo -n "$_nvcc_s,"
-    echo -n "$_cufft_s,"
-    echo -n "$_curand_s,"
-    echo -n "$_cusolver_s,"
-    echo -n "$_npp_s,"
-    echo -n "$_nsight_compute_s,"
-    echo -n "$_nsight_systems_s,"
-    echo -n "$_cupti_s,"
-    echo -n "$_gdb_s,"
-    echo -n "$_cudart_s,"
-    echo -n "$_nvrtc_s,"
-    echo -n "$_nsight_s,"
-    echo -n "$_driver_s,"
-    echo ""
-done
+function sym_csv {
+    TABLE_START=""
+    TABLE_END=""
+    ROW_START=""
+    ROW_END="\n"
+    HCELL_START=""
+    HCELL_END=","
+    CELL_START=""
+    CELL_END=","
+    sym_table
+}
+
+function size_table {
+    printf "$TABLE_START"
+    printf "$ROW_START"
+    printf "${HCELL_START}CUDA Release${HCELL_END}"
+    printf "${HCELL_START}Size (K)${HCELL_END}"
+    printf "${HCELL_START}cuSPARSE${HCELL_END}"
+    printf "${HCELL_START}cuBLAS${HCELL_END}"
+    printf "${HCELL_START}nvcc${HCELL_END}"
+    printf "${HCELL_START}cuFFT${HCELL_END}"
+    printf "${HCELL_START}cuRAND${HCELL_END}"
+    printf "${HCELL_START}cuSOLVER${HCELL_END}"
+    printf "${HCELL_START}npp${HCELL_END}"
+    printf "${HCELL_START}Nsight Compute${HCELL_END}"
+    printf "${HCELL_START}Nsight Systems${HCELL_END}"
+    printf "${HCELL_START}cuPTI${HCELL_END}"
+    printf "${HCELL_START}CUDA GDB${HCELL_END}"
+    printf "${HCELL_START}cudart${HCELL_END}"
+    printf "${HCELL_START}nvrtc${HCELL_END}"
+    printf "${HCELL_START}nsight${HCELL_END}"
+    printf "${HCELL_START}driver${HCELL_END}"
+    printf "$ROW_END"
+    for url in ${URLS[*]}; do
+        _r=$(cuda_release "$url")
+        _c_s=$(cuda_size "$url")
+        _cs_s=$(cusparse_size "$url")
+        _cb_s=$(cublas_size "$url")
+        _nvcc_s=$(nvcc_size "$url")
+        _cufft_s=$(cufft_size "$url")
+        _curand_s=$(curand_size "$url")
+        _cusolver_s=$(cusolver_size "$url")
+        _npp_s=$(npp_size "$url")
+        _nsight_compute_s=$(nsight_compute_size "$url")
+        _nsight_systems_s=$(nsight_systems_size "$url")
+        _cupti_s=$(cupti_size "$url")
+        _gdb_s=$(gdb_size "$url")
+        _cudart_s=$(cudart_size "$url")
+        _nvrtc_s=$(nvrtc_size "$url")
+        _nsight_s=$(nsight_size "$url")
+        _driver_s=$(driver_size "$url")
+        printf "$ROW_START"
+        printf "${CELL_START}$_r${CELL_END}"
+        printf "${CELL_START}$_c_s${CELL_END}"
+        printf "${CELL_START}$_cs_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_cs_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_cb_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_cb_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_nvcc_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_nvcc_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_cufft_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_cufft_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_curand_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_curand_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_cusolver_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_cusolver_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_npp_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_npp_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_nsight_compute_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_nsight_systems_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_nsight_systems_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_nsight_compute_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_cupti_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_cupti_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_gdb_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_gdb_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_cudart_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_cudart_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_nvrtc_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_nvrtc_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_nsight_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_nsight_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "${CELL_START}$_driver_s"
+        if [ ! "$SHOW_PCT" -eq 0 ]; then printf " ($(pct $_driver_s $_c_s)&#37)"; fi
+        printf "$CELL_END"
+        printf "$ROW_END"
+    done
+    printf "$TABLE_END"
+}
+
+function size_html {
+    TABLE_START="<table>\n"
+    TABLE_END="</table>\n"
+    ROW_START="<tr>"
+    ROW_END="</tr>\n"
+    HCELL_START="<th>"
+    HCELL_END="</th>"
+    CELL_START="<td>"
+    CELL_END="</td>"
+    SHOW_PCT=1
+    size_table
+}
+
+function size_csv {
+    TABLE_START=""
+    TABLE_END=""
+    ROW_START=""
+    ROW_END="\n"
+    HCELL_START=""
+    HCELL_END=","
+    CELL_START=""
+    CELL_END=","
+    SHOW_PCT=0
+    size_table
+}
+
+ver_html
+sym_html
+sym_csv
+size_html
+size_csv
